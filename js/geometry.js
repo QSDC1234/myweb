@@ -62,11 +62,11 @@ export function box(sx, sy, sz) {
 
 // Solid cylinder along Y, centered at origin (y from -h/2..+h/2).
 export function cylinder(rTop, rBottom, h, seg, opts = {}) {
-  const thetaStart = opts.thetaStart ?? 0;
-  const thetaLength = opts.thetaLength ?? Math.PI * 2;
-  const capTop = opts.capTop ?? true;
-  const capBottom = opts.capBottom ?? true;
-  const smooth = opts.smooth ?? true;
+  const thetaStart = (opts.thetaStart !== undefined) ? opts.thetaStart : 0;
+  const thetaLength = (opts.thetaLength !== undefined) ? opts.thetaLength : Math.PI * 2;
+  const capTop = (opts.capTop !== undefined) ? opts.capTop : true;
+  const capBottom = (opts.capBottom !== undefined) ? opts.capBottom : true;
+  const smooth = (opts.smooth !== undefined) ? opts.smooth : true;
   const b = new Builder();
   const hy = h / 2;
   const full = Math.abs(thetaLength - Math.PI * 2) < 1e-6;
@@ -170,8 +170,8 @@ export function tube(ri, ro, h, seg) {
 
 // Surface of revolution around Y. profile = [[r, y], ...] with y ascending.
 export function lathe(profile, seg, opts = {}) {
-  const capTop = opts.capTop ?? (profile[profile.length - 1][0] === 0);
-  const capBottom = opts.capBottom ?? (profile[0][0] === 0);
+  const capTop = (opts.capTop !== undefined) ? opts.capTop : (profile[profile.length - 1][0] === 0);
+  const capBottom = (opts.capBottom !== undefined) ? opts.capBottom : (profile[0][0] === 0);
   const b = new Builder();
   const n = profile.length;
 

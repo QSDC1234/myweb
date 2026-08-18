@@ -70,7 +70,9 @@ export class Renderer {
     this.canvas = canvas;
     this.gl = canvas.getContext('webgl', { antialias: true, alpha: false, premultipliedAlpha: false })
       || canvas.getContext('experimental-webgl');
-    if (!this.gl) throw new Error('WebGL not available');
+    if (!this.gl) {
+      throw new Error('当前浏览器不支持 WebGL 或已禁用硬件加速，无法渲染 3D 模型。请更换浏览器或在系统设置中开启硬件加速。');
+    }
     const gl = this.gl;
 
     const prog = gl.createProgram();
@@ -129,11 +131,16 @@ export class Renderer {
     return c;
   }
 
-  resize(w, h) {
-    this.canvas.width = w;
-    this.canvas.height = h;
-    this.gl.viewport(0, 0, w, h);
-    this._w = w; this._h = h;
+  resize(w, h, dpr) {
+    dpr = dpr || 1;
+    this.dpr = dpr;
+    this.cssW = w; this.cssH = h;
+    const bw = Math.max(1, Math.round(w * dpr));
+    const bh = Math.max(1, Math.round(h * dpr));
+    this.canvas.width = bw;
+    this.canvas.height = bh;
+    this.gl.viewport(0, 0, bw, bh);
+    this._w = bw; this._h = bh;
   }
 
   setCamera(projView, camPos) {
@@ -153,11 +160,11 @@ export class Renderer {
   // Draw one mesh. mat = world matrix (Float32Array 16).
   drawMesh(mat, geo, material, opts = {}) {
     const gl = this.gl;
-    const opacity = opts.opacity ?? material.opacity ?? 1;
-    const emissive = opts.emissive ?? material.emissive ?? [0, 0, 0];
-    const clip = opts.clip ?? null;          // [nx,ny,nz,d]
-    const pickMode = opts.pickMode ?? false;
-    const pickColor = opts.pickColor ?? [1, 1, 1];
+    const opacity = (opts.opacity != null) ? opts.opacity : ((material.opacity != null) ? material.opacity : 1);
+    const emissive = (opts.emissive != null) ? opts.emissive : ((material.emissive != null) ? material.emissive : [0, 0, 0]);
+    const clip = (opts.clip != null) ? opts.clip : null;          // [nx,ny,nz,d]
+    const pickMode = (opts.pickMode != null) ? opts.pickMode : false;
+    const pickColor = (opts.pickColor != null) ? opts.pickColor : [1, 1, 1];
 
     const c = this._cache(geo);
     gl.bindBuffer(gl.ARRAY_BUFFER, c.vbo);
@@ -181,8 +188,8 @@ export class Renderer {
       gl.uniform3fv(this.loc.uColor, material.color);
       gl.uniform3fv(this.loc.uEmissive, emissive);
       gl.uniform1f(this.loc.uOpacity, opacity);
-      gl.uniform1f(this.loc.uSpec, material.spec ?? 0.5);
-      gl.uniform1f(this.loc.uShininess, material.shininess ?? 40);
+      gl.uniform1f(this.loc.uSpec, (material.spec != null) ? material.spec : 0.5);
+      gl.uniform1f(this.loc.uShininess, (material.shininess != null) ? material.shininess : 40);
       gl.uniform1f(this.loc.uPickMode, 0);
       gl.uniform3fv(this.loc.uKeyDir, this.keyDir);
       gl.uniform3fv(this.loc.uKeyCol, this.keyCol);
@@ -202,7 +209,7 @@ export class Renderer {
   // ---- color picking ----
   _ensurePickSize() {
     const gl = this.gl;
-    const w = this._w || this.canvas.width, h = this._h || this.canvas.height;
+    const w = this.canvas.width, h = this.canvas.height;
     if (this._pickW === w && this._pickH === h) return;
     this._pickW = w; this._pickH = h;
     gl.bindTexture(gl.TEXTURE_2D, this.pickTex);
@@ -230,11 +237,13 @@ export class Renderer {
     return [r / 255, g / 255, b / 255];
   }
 
-  readPickId(canvasX, canvasY) {
+  readPickId(cssX, cssY) {
     const gl = this.gl;
-    const h = this._pickH;
+    const dpr = this.dpr || 1;
+    const x = Math.max(0, Math.min(this.canvas.width - 1, Math.round(cssX * dpr)));
+    const y = Math.max(0, Math.min(this.canvas.height - 1, Math.round((this.cssH - cssY) * dpr)));
     const px = new Uint8Array(4);
-    gl.readPixels(canvasX, h - 1 - canvasY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     if (px[0] === 0 && px[1] === 0 && px[2] === 0) return -1;
     return (px[0] << 16) | (px[1] << 8) | px[2];
   }

@@ -4,26 +4,57 @@ import { Renderer } from './renderer.js';
 import { cylinder } from './geometry.js';
 import { buildEngine, computeState, animate, Part, FIRE_ORDER, STROKE_NAMES, layerAmount, LAYER_INFO } from './parts.js';
 
-// surface runtime errors visibly instead of a silent blank screen
+// surface runtime errors visibly with full detail (not a masked "Script error.")
 function showFatal(msg) {
   try {
     let d = document.getElementById('fatal');
     if (!d) {
       d = document.createElement('div');
       d.id = 'fatal';
-      d.style.cssText = 'position:fixed;inset:0;z-index:999;background:#170a0a;color:#ff9d9d;padding:42px;font:14px/1.6 monospace;white-space:pre-wrap;overflow:auto';
+      d.style.cssText = 'position:fixed;inset:0;z-index:999;background:#170a0a;color:#ff9d9d;padding:42px;font:13px/1.6 monospace;white-space:pre-wrap;overflow:auto';
       document.body.appendChild(d);
     }
     d.textContent = '模型加载错误：\n' + msg;
   } catch (_) { /* ignore */ }
 }
-window.addEventListener('error', (e) => showFatal(e.message || String(e.error || e)));
+function fullDetail(e) {
+  if (e && e.stack) return e.stack;
+  if (e && e.message) return e.message;
+  return String(e);
+}
+// Uncaught exceptions: prefer the raw Error object (never masked), else message + location.
+window.addEventListener('error', (e) => {
+  if (e.error && (e.error.stack || e.error.message)) {
+    showFatal(fullDetail(e.error));
+  } else {
+    const loc = e.filename ? ('\n@ ' + e.filename + ':' + e.lineno + ':' + e.colno) : '';
+    showFatal((e.message || '未知错误') + loc);
+  }
+});
+// Resource load failures (script/css): capture phase, show the exact URL + hint.
+window.addEventListener('error', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+    showFatal('资源加载失败：' + (t.src || t.href) + '\n（请检查文件是否存在、路径与大小写是否一致）');
+  }
+}, true);
 
 const canvas = document.getElementById('c');
-const renderer = new Renderer(canvas);
+let renderer, engine;
+try {
+  renderer = new Renderer(canvas);
+} catch (e) {
+  showFatal(fullDetail(e));
+  throw e;
+}
 
 // ---------------- engine ----------------
-const engine = buildEngine();
+try {
+  engine = buildEngine();
+} catch (e) {
+  showFatal(fullDetail(e));
+  throw e;
+}
 const { parts, roots, byId } = engine;
 
 // guide lines: one per exploded top-level assembly
@@ -131,7 +162,7 @@ function computeWorld(part, parentWorld) {
 function partOpacity(p) {
   let o = 1;
   const m = p.meshes.length ? p.meshes[0].material : null;
-  if (p.transparent || (m && m.opacity !== undefined && m.opacity < 1)) o = (m && m.opacity) ?? 1;
+  if (p.transparent || (m && m.opacity !== undefined && m.opacity < 1)) o = (m && m.opacity != null) ? m.opacity : 1;
   else if (view.xray && p.shell) o = view.xrayLevel;
   return o;
 }
@@ -247,9 +278,14 @@ function step(dt) {
 }
 
 function loop(t) {
-  const dt = Math.min(0.1, (t - anim.last) / 1000 || 0.016);
-  anim.last = t;
-  step(dt);
+  try {
+    const dt = Math.min(0.1, (t - anim.last) / 1000 || 0.016);
+    anim.last = t;
+    step(dt);
+  } catch (e) {
+    showFatal(fullDetail(e));
+    return; // stop the loop so the error stays visible
+  }
   requestAnimationFrame(loop);
 }
 
@@ -258,7 +294,7 @@ const pointers = new Map();
 let pinchDist = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* some browsers throw here */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, btn: e.button });
   pinchDist = 0;
   view.goal = null;
@@ -506,7 +542,8 @@ function wireControls() {
     viewTop: { theta: 0.6, phi: 1.35, dist: 1300, target: [0, 140, 0] },
     viewIso: { theta: 0.6, phi: 0.32, dist: 980, target: [0, 130, 0] },
   };
-  for (const [id, v] of Object.entries(presets)) {
+  for (const id of Object.keys(presets)) {
+    const v = presets[id];
     $(id).addEventListener('click', () => Object.assign(view, v));
   }
 }
@@ -525,9 +562,11 @@ function rebuildTreePreserve() {
 // ---------------- init ----------------
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
-  renderer.resize(w, h);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap DPR for mobile performance
+  renderer.resize(w, h, dpr);
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 150));
 
 buildTree();
 wireControls();

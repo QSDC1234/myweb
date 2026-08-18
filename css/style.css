@@ -69,7 +69,7 @@ body {
 
 /* ---- viewport ---- */
 #viewport { position: relative; flex: 1 1 auto; min-width: 0; background: radial-gradient(ellipse at 50% 40%, #131a24, #0a0d12); }
-#c { width: 100%; height: 100%; display: block; }
+#c { width: 100%; height: 100%; display: block; touch-action: none; -webkit-tap-highlight-color: transparent; }
 
 #hint {
   position: absolute; left: 10px; bottom: 10px; color: var(--dim); font-size: 12px;
@@ -153,3 +153,36 @@ input[type="range"] {
 .note-body li { margin: 7px 0; line-height: 1.6; }
 .note-body code { background: #0d1117; padding: 1px 5px; border-radius: 4px; color: #9fd0ff; }
 .note-body .tip { color: #f0c98a; }
+
+/* ---- responsive: mobile / narrow screens ---- */
+@media (max-width: 860px) {
+  html, body { height: auto; min-height: 100%; }
+  body { display: block; overflow-x: hidden; overflow-y: auto; }
+
+  #topbar { flex-wrap: wrap; gap: 6px; padding: 8px 12px; position: sticky; top: 0; z-index: 40; }
+  #topbar h1 { font-size: 15px; }
+  #topbar .sub { display: block; width: 100%; margin-left: 0; font-size: 11px; }
+
+  #app { flex-direction: column; overflow: visible; }
+
+  /* 3D viewport first */
+  #viewport { order: 1; flex: 0 0 auto; height: 58vh; min-height: 320px; max-height: 66vh; }
+
+  /* controls second */
+  #controls { order: 2; width: 100%; flex: 0 0 auto; border-left: none; border-top: 1px solid var(--line); }
+  #controls h2 { margin-top: 10px; }
+  .btn-row { flex-wrap: wrap; }
+  .ctrl-group button { min-height: 42px; padding: 8px 10px; flex: 1 1 auto; }
+  .presets button { min-height: 36px; }
+
+  /* part list third */
+  #sidebar { order: 3; width: 100%; flex: 0 0 auto; border-right: none; border-top: 1px solid var(--line); }
+
+  #hint { display: none; }
+
+  #cyclePanel { width: 150px; top: 8px; right: 8px; padding: 8px 10px; }
+  #infoPanel { left: 8px; right: 8px; bottom: 8px; max-height: 42%; overflow-y: auto; }
+  #infoPanel .info-row { flex-direction: column; gap: 2px; }
+
+  .note-card { padding: 16px 18px; }
+}
