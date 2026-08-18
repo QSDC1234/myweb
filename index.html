@@ -3,14 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>直列四缸四冲程汽油发动机 · 交互式工程模型</title>
+<title>汽车发动机 3D 实验室</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header id="topbar">
   <div class="brand">
-    <h1>直列四缸汽油发动机</h1>
-    <span class="sub">四冲程 · 点火顺序 1-3-4-2 · 交互式工程教学模型</span>
+    <h1 id="engTitle">直列四缸四冲程汽油发动机</h1>
+    <span class="sub">汽车发动机 3D 交互实验室</span>
+  </div>
+  <div class="engine-switch">
+    <button id="btnI4" class="seg active">直列四缸</button>
+    <button id="btnV8" class="seg">V8</button>
   </div>
   <button id="btnNote" class="ghost">模型说明</button>
 </header>
@@ -26,10 +30,14 @@
 
     <div id="cyclePanel">
       <div class="cyc-title">工作循环 · 实时状态</div>
-      <div id="cyl1" class="cyl"></div>
-      <div id="cyl2" class="cyl"></div>
-      <div id="cyl3" class="cyl"></div>
-      <div id="cyl4" class="cyl"></div>
+      <div id="engineInfo">
+        <span>发动机 <b id="engName">直列四缸</b></span>
+        <span>循环 <b id="engCyc">四冲程</b></span>
+        <span>气缸 <b id="engCyl">4 缸</b></span>
+        <span>布局 <b id="engLayout">直列</b></span>
+        <span>点火顺序 <b id="engFire">1-3-4-2</b></span>
+      </div>
+      <div id="cylList"></div>
       <div class="cyc-legend">
         <span class="lg lg-intake">进气</span><span class="lg lg-compression">压缩</span>
         <span class="lg lg-power">做功</span><span class="lg lg-exhaust">排气</span>
@@ -59,7 +67,7 @@
 
     <div class="ctrl-group">
       <label>转速 <span id="rpmVal" class="val">1200 RPM</span></label>
-      <input type="range" id="rpm" min="0" max="4000" step="100" value="1200">
+      <input type="range" id="rpm" min="0" max="6000" step="100" value="1200">
       <div class="presets">
         <button class="rpmPreset" data-rpm="0">0</button>
         <button class="rpmPreset" data-rpm="500">500</button>
@@ -67,6 +75,8 @@
         <button class="rpmPreset" data-rpm="2000">2000</button>
         <button class="rpmPreset" data-rpm="3000">3000</button>
         <button class="rpmPreset" data-rpm="4000">4000</button>
+        <button class="rpmPreset" data-rpm="5000">5000</button>
+        <button class="rpmPreset" data-rpm="6000">6000</button>
       </div>
     </div>
 

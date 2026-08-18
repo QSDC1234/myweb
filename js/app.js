@@ -3,6 +3,7 @@ import { mat4Identity, mat4Translation, mat4Mul, mat4Perspective, mat4LookAt, ma
 import { Renderer } from './renderer.js';
 import { cylinder } from './geometry.js';
 import { buildEngine, computeState, animate, Part, FIRE_ORDER, STROKE_NAMES, layerAmount, LAYER_INFO } from './parts.js';
+import { buildV8Engine, computeV8State, V8_INFO } from './v8-parts.js';
 
 // surface runtime errors visibly with full detail (not a masked "Script error.")
 function showFatal(msg) {
@@ -40,7 +41,7 @@ window.addEventListener('error', (e) => {
 }, true);
 
 const canvas = document.getElementById('c');
-let renderer, engine;
+let renderer;
 try {
   renderer = new Renderer(canvas);
 } catch (e) {
@@ -48,18 +49,30 @@ try {
   throw e;
 }
 
-// ---------------- engine ----------------
-try {
-  engine = buildEngine();
-} catch (e) {
-  showFatal(fullDetail(e));
-  throw e;
-}
-const { parts, roots, byId } = engine;
+// ---------------- engine registry / manager ----------------
+const ENGINES = {
+  i4: {
+    id: 'i4', name: '直列四缸', title: '直列四缸四冲程汽油发动机',
+    cylinders: 4, layout: '直列', cycle: '四冲程', fireOrderText: '1-3-4-2',
+    build: buildEngine, computeState, animate,
+  },
+  v8: {
+    id: 'v8', name: 'V8', title: 'V8 四冲程汽油发动机',
+    cylinders: 8, layout: '90° V型', cycle: '四冲程', fireOrderText: '1-8-4-3-6-5-7-2',
+    build: buildV8Engine, computeState: computeV8State, animate,
+  },
+};
+const engineStates = {
+  i4: { rpm: 1200, crankDeg: 0, explode: 0, targetExplode: 0, currentLayer: 0, playing: true },
+  v8: { rpm: 1000, crankDeg: 0, explode: 0, targetExplode: 0, currentLayer: 0, playing: true },
+};
+let current = ENGINES.i4;
+let engine, parts, roots, byId;
+const guides = [];
+const pickToPart = new Map();
 
 // guide lines: one per exploded top-level assembly
-const guides = [];
-(function createGuides() {
+function createGuides() {
   const guideGeo = cylinder(1.5, 1.5, 1, 8);      // unit-length thin rod along Y
   const guideMat = { color: [0.62, 0.72, 0.85], spec: 0.15, shininess: 8, opacity: 0.30 };
   for (const r of roots) {
@@ -72,7 +85,26 @@ const guides = [];
     roots.push(g);
     guides.push(g);
   }
-})();
+}
+
+function setupEngine(id) {
+  current = ENGINES[id];
+  guides.length = 0;
+  pickToPart.clear();
+  try {
+    engine = current.build();
+  } catch (e) {
+    showFatal(fullDetail(e));
+    throw e;
+  }
+  parts = engine.parts;
+  roots = engine.roots;
+  byId = engine.byId;
+  createGuides();
+  parts.forEach((p, i) => { p.pickIndex = i + 1; pickToPart.set(i + 1, p); });
+}
+
+setupEngine('i4');
 
 function updateGuides() {
   for (const g of guides) {
@@ -98,9 +130,8 @@ function updateGuides() {
   }
 }
 
-// pick id -> part
-const pickToPart = new Map();
-parts.forEach((p, i) => { p.pickIndex = i + 1; pickToPart.set(i + 1, p); });
+// pick id -> part (populated in setupEngine)
+
 
 // ---------------- state ----------------
 const view = {
@@ -269,7 +300,7 @@ function step(dt) {
     view.dist += (view.goal.dist - view.dist) * kc;
     if (Math.abs(view.goal.dist - view.dist) < 2) view.goal = null;
   }
-  const st = computeState(view.crankDeg);
+  const st = current.computeState(view.crankDeg);
   animate(engine, st);
   updateGuides();
   render();
@@ -439,13 +470,31 @@ function updateInfo(p) {
 
 // ---------------- UI: cycle panel ----------------
 const STROKE_ZH = { power: '做功', exhaust: '排气', intake: '进气', compression: '压缩' };
-const strokeEls = [1, 2, 3, 4].map((i) => document.getElementById('cyl' + i));
+function buildCyclePanel() {
+  const list = document.getElementById('cylList');
+  list.innerHTML = '';
+  for (let i = 0; i < current.cylinders; i++) {
+    const el = document.createElement('div');
+    el.className = 'cyl';
+    el.id = 'cyl' + (i + 1);
+    list.appendChild(el);
+  }
+  syncEngineInfo();
+}
+function syncEngineInfo() {
+  document.getElementById('engName').textContent = current.name;
+  document.getElementById('engCyc').textContent = current.cycle;
+  document.getElementById('engCyl').textContent = current.cylinders + ' 缸';
+  document.getElementById('engLayout').textContent = current.layout;
+  document.getElementById('engFire').textContent = current.fireOrderText;
+}
 function updateCyclePanel(st) {
-  for (let i = 0; i < 4; i++) {
-    const el = strokeEls[i];
+  const els = document.getElementById('cylList').children;
+  for (let i = 0; i < current.cylinders && i < els.length; i++) {
+    const el = els[i];
     const key = st.cyl[i].stroke;
     el.textContent = `${i + 1}缸 ${STROKE_ZH[key]}`;
-    el.className = 'cyl-' + key;
+    el.className = 'cyl cyl-' + key;
     el.style.display = view.cycle ? '' : 'none';
   }
   document.getElementById('crankDegReadout').textContent = Math.round(view.crankDeg % 720) + '°';
@@ -559,6 +608,60 @@ function rebuildTreePreserve() {
   syncTreeSelection();
 }
 
+// ---------------- engine switching ----------------
+function resetCameraForEngine() {
+  if (current.id === 'v8') {
+    view.theta = 0.6; view.phi = 0.35; view.dist = 1200; view.target = [0, 110, 0];
+  } else {
+    view.theta = 0.6; view.phi = 0.32; view.dist = 980; view.target = [0, 130, 0];
+  }
+}
+function syncUiState() {
+  const $ = (id) => document.getElementById(id);
+  $('rpm').value = view.rpm;
+  $('rpmVal').textContent = view.rpm + ' RPM';
+  $('explode').value = Math.round(view.targetExplode * 100);
+  $('explodeVal').textContent = Math.round(view.targetExplode * 100) + '%';
+  $('layerLabel').textContent = LAYER_INFO[view.currentLayer].name;
+  $('btnPlay').textContent = view.playing ? '⏸ 暂停' : '▶ 播放';
+  $('btnI4').classList.toggle('active', current.id === 'i4');
+  $('btnV8').classList.toggle('active', current.id === 'v8');
+  $('engTitle').textContent = current.title;
+  document.title = current.title + ' · 汽车发动机3D实验室';
+  for (const g of engine.gasParts) g.visible = view.cycle;
+  for (const f of engine.flameParts) f.visible = view.cycle;
+}
+function switchEngine(id) {
+  if (id === current.id) return;
+  // save current runtime state so each engine keeps its own RPM/angle/explosion
+  const s = engineStates[current.id];
+  s.rpm = view.rpm; s.crankDeg = view.crankDeg; s.explode = view.explode;
+  s.targetExplode = view.targetExplode; s.currentLayer = view.currentLayer; s.playing = view.playing;
+
+  const vp = document.getElementById('viewport');
+  vp.style.opacity = '0';
+  setTimeout(() => {
+    try {
+      setupEngine(id);
+    } catch (e) {
+      showFatal(fullDetail(e));
+      vp.style.opacity = '1';
+      return;
+    }
+    const t = engineStates[id];
+    view.rpm = t.rpm; view.crankDeg = t.crankDeg; view.explode = t.explode;
+    view.targetExplode = t.targetExplode; view.currentLayer = t.currentLayer; view.playing = t.playing;
+    view.isolatedId = null; view.selectedId = null; view.goal = null;
+    resetCameraForEngine();
+    buildCyclePanel();
+    buildTree();
+    updateInfo({ name: '—', func: '点击左侧结构树或直接点击模型上的零件查看功能与机械关系。', rel: '', motion: '' });
+    syncUiState();
+    syncModeButtons();
+    vp.style.opacity = '1';
+  }, 160);
+}
+
 // ---------------- init ----------------
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -568,14 +671,18 @@ function resize() {
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 150));
 
+buildCyclePanel();
 buildTree();
 wireControls();
 resize();
 updateInfo({ name: '—', func: '点击左侧结构树或直接点击模型上的零件查看功能与机械关系。', rel: '', motion: '' });
+syncUiState();
 syncModeButtons();
+document.getElementById('btnI4').addEventListener('click', () => switchEngine('i4'));
+document.getElementById('btnV8').addEventListener('click', () => switchEngine('v8'));
 document.getElementById('btnNote').addEventListener('click', () => document.getElementById('noteOverlay').classList.remove('hidden'));
 document.getElementById('btnNoteClose').addEventListener('click', () => document.getElementById('noteOverlay').classList.add('hidden'));
 requestAnimationFrame((t) => { anim.last = t; loop(t); });
 
 // expose for debugging
-window.__engine = { engine, view, parts };
+window.__engine = { engine, view, parts, switchEngine };

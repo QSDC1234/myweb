@@ -31,7 +31,7 @@ export const MAT = {
 };
 
 // ---------------- helpers ----------------
-function transformGeo(g, mat) {
+export function transformGeo(g, mat) {
   const np = new Float32Array(g.positions.length);
   for (let i = 0; i < g.positions.length; i += 3) {
     const p = mat4Point(mat, [g.positions[i], g.positions[i + 1], g.positions[i + 2]]);
@@ -74,7 +74,7 @@ export class Part {
 }
 
 // ---------------- timing belt path (external-tangent loop) ----------------
-function beltPath(c1, r1, c2, r2, arcSeg = 24, lineSeg = 14) {
+export function beltPath(c1, r1, c2, r2, arcSeg = 24, lineSeg = 14) {
   const d = Math.hypot(c2[0] - c1[0], c2[1] - c1[1]);
   const u = [(c2[0] - c1[0]) / d, (c2[1] - c1[1]) / d];
   const v = [-u[1], u[0]];
@@ -122,7 +122,7 @@ function beltPath(c1, r1, c2, r2, arcSeg = 24, lineSeg = 14) {
   return { pts, cum, total };
 }
 
-function pathPointAt(path, s) {
+export function pathPointAt(path, s) {
   const { pts, cum, total } = path;
   s = ((s % total) + total) % total;
   let i = 1;
@@ -214,15 +214,15 @@ const MOTION_DEFS = [
   { re: /^点火火焰/, m: '做功冲程初期短暂出现并熄灭' },
 ];
 
-function assignLayersAndMotion(parts, roots) {
+export function assignLayersAndMotion(parts, roots, layerDefs = LAYER_DEFS, motionDefs = MOTION_DEFS) {
   for (const p of parts) {
     // motion
     p.motion = '固定不动（随所属总成运动）';
-    for (const d of MOTION_DEFS) if (d.re.test(p.name)) { p.motion = d.m; break; }
+    for (const d of motionDefs) if (d.re.test(p.name)) { p.motion = d.m; break; }
     // layer + explode (only top-level roots get their own explode offset)
     if (p.parent) continue;
     p.layer = 0; p.explode = null;
-    for (const d of LAYER_DEFS) {
+    for (const d of layerDefs) {
       if (d.re.test(p.name)) { p.layer = d.layer; p.explode = d.explode.slice(); break; }
     }
   }
