@@ -1,8 +1,8 @@
 // app.js — main application: camera, interaction, animation, rendering, UI.
 import { mat4Identity, mat4Translation, mat4Mul, mat4Perspective, mat4LookAt, mat4Scale, mat4RotX, mat4AxisAngle, mat4MulAll, v3norm, v3cross, v3sub, v3len } from './math3d.js';
 import { Renderer } from './renderer.js';
-import { cylinder } from './geometry.js';
-import { buildEngine, computeState, animate, Part, FIRE_ORDER, STROKE_NAMES, layerAmount, LAYER_INFO } from './parts.js';
+import { cylinder, tube } from './geometry.js';
+import { buildEngine, computeState, animate, Part, FIRE_ORDER, STROKE_NAMES, layerAmount, LAYER_INFO, transformGeo } from './parts.js';
 import { buildV8Engine, computeV8State, V8_INFO } from './v8-parts.js';
 
 // surface runtime errors visibly with full detail (not a masked "Script error.")
@@ -55,13 +55,35 @@ const ENGINES = {
     id: 'i4', name: '直列四缸', title: '直列四缸四冲程汽油发动机',
     cylinders: 4, layout: '直列', cycle: '四冲程', fireOrderText: '1-3-4-2',
     build: buildEngine, computeState, animate,
-    labels: ['曲轴', '活塞1', '连杆1', '凸轮轴', '进气门1', '火花塞1', '气缸盖', '缸体', '飞轮', '排气歧管'],
+    labels: [
+      { name: '曲轴', text: 'Crankshaft' },
+      { name: '活塞1', text: 'Piston #1' },
+      { name: '连杆1', text: 'Connecting Rod' },
+      { name: '凸轮轴', text: 'Camshaft' },
+      { name: '进气门1', text: 'Intake Valve' },
+      { name: '火花塞1', text: 'Spark Plug' },
+      { name: '气缸盖', text: 'Cylinder Head' },
+      { name: '缸体', text: 'Engine Block' },
+      { name: '飞轮', text: 'Flywheel' },
+      { name: '排气歧管', text: 'Exhaust Manifold' },
+    ],
   },
   v8: {
     id: 'v8', name: 'V8', title: 'V8 四冲程汽油发动机',
     cylinders: 8, layout: '90° V型', cycle: '四冲程', fireOrderText: '1-8-4-3-6-5-7-2',
     build: buildV8Engine, computeState: computeV8State, animate,
-    labels: ['曲轴', '活塞1', '连杆1', '凸轮轴(左排)', '进气门1', '火花塞1', '气缸盖(左排)', '缸体', '飞轮', '排气歧管(左排)'],
+    labels: [
+      { name: '曲轴', text: 'Crankshaft' },
+      { name: '活塞1', text: 'Piston #1' },
+      { name: '连杆1', text: 'Connecting Rod' },
+      { name: '凸轮轴(左排)', text: 'Camshaft (L)' },
+      { name: '进气门1', text: 'Intake Valve' },
+      { name: '火花塞1', text: 'Spark Plug' },
+      { name: '气缸盖(左排)', text: 'Cylinder Head (L)' },
+      { name: '缸体', text: 'Engine Block' },
+      { name: '飞轮', text: 'Flywheel' },
+      { name: '排气歧管(左排)', text: 'Exhaust Header (L)' },
+    ],
   },
 };
 const engineStates = {
@@ -72,6 +94,7 @@ let current = ENGINES.i4;
 let engine, parts, roots, byId;
 const guides = [];
 const pickToPart = new Map();
+const labelEls = [];
 
 // guide lines: one per exploded top-level assembly
 function createGuides() {
@@ -89,6 +112,25 @@ function createGuides() {
   }
 }
 
+// 视觉风格：曲轴与连杆 → 青铜暖色金属；展示台 → 深色圆盘 + 发光青蓝圆环
+function applyVizStyle() {
+  const bronze = { color: [0.60, 0.44, 0.22], spec: 0.80, shininess: 95 };
+  for (const p of parts) {
+    if (/^曲轴$|^主轴颈|^飞轮|^连杆\d|^连杆大头/.test(p.name)) {
+      for (const m of p.meshes) m.material = bronze;
+    }
+  }
+}
+function createPlatform() {
+  const p = new Part('platform', '', { category: '', pickable: false });
+  p.addMesh(transformGeo(cylinder(330, 330, 6, 48), mat4Translation(0, -204, 0)),
+    { color: [0.05, 0.07, 0.10], spec: 0.45, shininess: 60 });
+  p.addMesh(transformGeo(tube(325, 332, 5, 48), mat4Translation(0, -200, 0)),
+    { color: [0.0, 0.10, 0.20], spec: 0.6, shininess: 60, emissive: [0.08, 0.45, 1.0] });
+  parts.push(p);
+  roots.push(p);
+}
+
 function setupEngine(id) {
   current = ENGINES[id];
   guides.length = 0;
@@ -102,6 +144,8 @@ function setupEngine(id) {
   parts = engine.parts;
   roots = engine.roots;
   byId = engine.byId;
+  applyVizStyle();
+  createPlatform();
   createGuides();
   buildLabels();
   parts.forEach((p, i) => { p.pickIndex = i + 1; pickToPart.set(i + 1, p); });
@@ -110,17 +154,16 @@ function setupEngine(id) {
 setupEngine('i4');
 
 // ---------------- 3D part labels (dot + line + glass tag) ----------------
-const labelEls = [];
 function buildLabels() {
   const layer = document.getElementById('labelLayer');
   layer.innerHTML = '';
   labelEls.length = 0;
-  for (const name of current.labels) {
-    const p = parts.find((q) => q.name === name);
+  for (const it of current.labels) {
+    const p = parts.find((q) => q.name === it.name);
     if (!p) continue;
     const el = document.createElement('div');
     el.className = 'plabel';
-    el.innerHTML = '<span class="pdot"></span><span class="pline"></span><span class="ptext">' + name + '</span>';
+    el.innerHTML = '<span class="pdot"></span><span class="pline"></span><span class="ptext">' + it.text + '</span>';
     layer.appendChild(el);
     labelEls.push({ el, p });
   }
@@ -187,8 +230,8 @@ const view = {
   cutaway: false,
   cutX: 0,
   cutFlip: false,
-  xray: false,
-  xrayLevel: 0.30,      // shell opacity in x-ray
+  xray: true,
+  xrayLevel: 0.28,      // shell opacity in x-ray
   cycle: true,
   isolatedId: null,
   selectedId: null,

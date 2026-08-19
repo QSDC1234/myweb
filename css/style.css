@@ -92,13 +92,14 @@ body {
 
 /* 3D part labels */
 #labelLayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.plabel { position: absolute; display: flex; align-items: center; gap: 7px; white-space: nowrap; transform: translate(-3px,-3px); }
-.plabel .pdot { width: 6px; height: 6px; border-radius: 50%; background: #5fb0ff; box-shadow: 0 0 6px rgba(95,176,255,.9); flex: 0 0 auto; }
-.plabel .pline { width: 16px; height: 1px; background: linear-gradient(90deg, rgba(95,176,255,.8), rgba(95,176,255,.15)); flex: 0 0 auto; }
+.plabel { position: absolute; display: flex; align-items: center; gap: 8px; white-space: nowrap; transform: translate(-3px,-3px); }
+.plabel .pdot { width: 7px; height: 7px; border-radius: 50%; background: #43d7ff; box-shadow: 0 0 8px rgba(67,215,255,1), 0 0 16px rgba(67,215,255,.6); flex: 0 0 auto; }
+.plabel .pline { width: 22px; height: 1px; background: linear-gradient(90deg, rgba(67,215,255,.95), rgba(67,215,255,.15)); flex: 0 0 auto; }
 .plabel .ptext {
-  font-size: 11px; color: #dbe6f4; letter-spacing: .5px;
-  background: rgba(10,14,20,.72); border: 1px solid rgba(120,160,210,.22);
-  padding: 2px 8px; border-radius: 5px; backdrop-filter: blur(4px);
+  font-size: 11px; color: #eaf6ff; letter-spacing: .4px; font-weight: 500;
+  background: rgba(7,11,17,.78); border: 1px solid rgba(90,180,230,.28);
+  padding: 3px 9px; border-radius: 12px; backdrop-filter: blur(5px);
+  box-shadow: 0 2px 10px rgba(0,0,0,.4);
 }
 
 #hint {

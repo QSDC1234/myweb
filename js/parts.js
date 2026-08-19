@@ -709,6 +709,15 @@ export function buildEngine() {
     flameParts.push(flame);
   }
 
+  // 气缸发光光柱（科技能量轨迹）
+  for (let i = 0; i < 4; i++) {
+    const z = cylZ[i];
+    const beam = P(`气缸光柱${i + 1}`, { category: '', pickable: false, transparent: true,
+      func: '气缸轴线发光光柱，指示活塞运动轨迹。', rel: '沿气缸轴线从曲轴延伸至缸盖。' });
+    beam.addMesh(transformGeo(G.cylinder(2.5, 2.5, deckY, 16), T(0, deckY / 2, z)),
+      { color: [0.0, 0.12, 0.30], spec: 0.2, shininess: 10, opacity: 0.32, emissive: [0.05, 0.28, 0.70] });
+  }
+
   assignLayersAndMotion(parts, roots);
 
   return { roots, parts, byId, dynamicParts: parts.filter((p) => p.update), chain, gasParts, flameParts };

@@ -482,6 +482,15 @@ export function buildV8Engine() {
     flameParts.push(flame);
   }
 
+  // 气缸发光光柱（科技能量轨迹）
+  for (let i = 0; i < 8; i++) {
+    const beta = BANK_TILT[i], z = CYL_Z[i];
+    const beam = P(`气缸光柱${i + 1}`, { category: '', pickable: false, transparent: true,
+      func: '气缸轴线发光光柱，指示活塞运动轨迹。', rel: '沿本排气缸轴线从曲轴延伸至缸盖。' });
+    beam.addMesh(bank(G.cylinder(2.5, 2.5, V8.deckDist, 16), beta, V8.deckDist / 2, z),
+      { color: [0.0, 0.12, 0.30], spec: 0.2, shininess: 10, opacity: 0.32, emissive: [0.05, 0.28, 0.70] });
+  }
+
   assignLayersAndMotion(parts, roots, V8_LAYER_DEFS, V8_MOTION_DEFS);
 
   return { roots, parts, byId, dynamicParts: parts.filter((p) => p.update), chain, gasParts, flameParts };
