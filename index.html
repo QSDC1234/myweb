@@ -27,9 +27,10 @@
 
   <main id="viewport">
     <canvas id="c"></canvas>
+    <div id="labelLayer"></div>
 
     <div id="cyclePanel">
-      <div class="cyc-title">工作循环 · 实时状态</div>
+      <div class="cyc-title">ENGINE STATUS <span>工作循环 · 实时状态</span></div>
       <div id="engineInfo">
         <span>发动机 <b id="engName">直列四缸</b></span>
         <span>循环 <b id="engCyc">四冲程</b></span>
@@ -94,6 +95,7 @@
       <div class="btn-row" style="margin-top:6px">
         <button id="btnFocus">◎ 自动聚焦当前层</button>
         <button id="btnGuides">位置连线</button>
+        <button id="btnLabels">零件标注</button>
       </div>
     </div>
 

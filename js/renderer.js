@@ -32,6 +32,9 @@ uniform vec3 uKeyDir;
 uniform vec3 uKeyCol;
 uniform vec3 uFillDir;
 uniform vec3 uFillCol;
+uniform vec3 uRimCol;
+uniform vec3 uEnvTop;
+uniform vec3 uEnvBottom;
 uniform vec3 uCamPos;
 uniform vec4 uClipPlane;
 uniform float uClipOn;
@@ -44,13 +47,30 @@ void main() {
   if (uPickMode > 0.5) { gl_FragColor = vec4(uColor, 1.0); return; }
   vec3 N = normalize(vWorldNormal);
   vec3 V = normalize(uCamPos - vWorldPos);
-  vec3 col = uColor * 0.30;
+  float NV = clamp(dot(N, V), 0.0, 1.0);
+  float fres = pow(1.0 - NV, 5.0);
+
+  vec3 col = uColor * 0.08; // very dark ambient base
+
+  // key light (soft warm white)
   float dk = max(dot(N, uKeyDir), 0.0);
-  col += uColor * uKeyCol * dk * 0.85;
+  col += uColor * uKeyCol * dk * 0.82;
   vec3 Hk = normalize(uKeyDir + V);
-  col += uKeyCol * uSpec * pow(max(dot(N, Hk), 0.0), uShininess);
+  float sk = pow(max(dot(N, Hk), 0.0), uShininess);
+  col += uKeyCol * uSpec * sk * (0.8 + fres * 1.5) * (0.40 + 0.50 * uSpec);
+
+  // fill light (cool)
   float df = max(dot(N, uFillDir), 0.0);
   col += uColor * uFillCol * df * 0.30;
+
+  // rim / contour light (edge glow)
+  float rim = pow(1.0 - NV, 3.0);
+  col += uRimCol * rim * (0.25 + uSpec * 0.70);
+
+  // fake environment reflection (gradient sky -> ground)
+  vec3 env = mix(uEnvBottom, uEnvTop, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
+  col += env * uSpec * (0.20 + fres * 1.0);
+
   col += uEmissive;
   gl_FragColor = vec4(col, uOpacity);
 }`;
@@ -68,7 +88,7 @@ function compile(gl, type, src) {
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.gl = canvas.getContext('webgl', { antialias: true, alpha: false, premultipliedAlpha: false })
+    this.gl = canvas.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: false })
       || canvas.getContext('experimental-webgl');
     if (!this.gl) {
       throw new Error('当前浏览器不支持 WebGL 或已禁用硬件加速，无法渲染 3D 模型。请更换浏览器或在系统设置中开启硬件加速。');
@@ -87,8 +107,8 @@ export class Renderer {
 
     this.loc = {};
     for (const n of ['aPos', 'aNormal', 'uWorld', 'uProjView', 'uNormalMat', 'uColor', 'uEmissive',
-      'uOpacity', 'uSpec', 'uShininess', 'uKeyDir', 'uKeyCol', 'uFillDir', 'uFillCol', 'uCamPos',
-      'uClipPlane', 'uClipOn', 'uPickMode']) {
+      'uOpacity', 'uSpec', 'uShininess', 'uKeyDir', 'uKeyCol', 'uFillDir', 'uFillCol', 'uRimCol',
+      'uEnvTop', 'uEnvBottom', 'uCamPos', 'uClipPlane', 'uClipOn', 'uPickMode']) {
       this.loc[n] = gl.getUniformLocation(prog, n);
       if (n.startsWith('a')) this.loc[n] = gl.getAttribLocation(prog, n);
     }
@@ -97,7 +117,7 @@ export class Renderer {
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
-    gl.clearColor(0.055, 0.065, 0.085, 1);
+    gl.clearColor(0, 0, 0, 0);
 
     this.geoCache = new Map();
 
@@ -148,9 +168,10 @@ export class Renderer {
     this.camPos = camPos;
   }
 
-  setLights(keyDir, keyCol, fillDir, fillCol) {
+  setLights(keyDir, keyCol, fillDir, fillCol, rimCol, envTop, envBottom) {
     this.keyDir = keyDir; this.keyCol = keyCol;
     this.fillDir = fillDir; this.fillCol = fillCol;
+    this.rimCol = rimCol; this.envTop = envTop; this.envBottom = envBottom;
   }
 
   clear() {
@@ -195,6 +216,9 @@ export class Renderer {
       gl.uniform3fv(this.loc.uKeyCol, this.keyCol);
       gl.uniform3fv(this.loc.uFillDir, this.fillDir);
       gl.uniform3fv(this.loc.uFillCol, this.fillCol);
+      gl.uniform3fv(this.loc.uRimCol, this.rimCol);
+      gl.uniform3fv(this.loc.uEnvTop, this.envTop);
+      gl.uniform3fv(this.loc.uEnvBottom, this.envBottom);
       gl.uniform3fv(this.loc.uCamPos, this.camPos);
       if (clip) {
         gl.uniform4fv(this.loc.uClipPlane, clip);
@@ -225,7 +249,7 @@ export class Renderer {
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.clearColor(0.055, 0.065, 0.085, 1);
+    gl.clearColor(0, 0, 0, 0);
   }
 
   endPick() {

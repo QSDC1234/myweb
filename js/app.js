@@ -55,11 +55,13 @@ const ENGINES = {
     id: 'i4', name: '直列四缸', title: '直列四缸四冲程汽油发动机',
     cylinders: 4, layout: '直列', cycle: '四冲程', fireOrderText: '1-3-4-2',
     build: buildEngine, computeState, animate,
+    labels: ['曲轴', '活塞1', '连杆1', '凸轮轴', '进气门1', '火花塞1', '气缸盖', '缸体', '飞轮', '排气歧管'],
   },
   v8: {
     id: 'v8', name: 'V8', title: 'V8 四冲程汽油发动机',
     cylinders: 8, layout: '90° V型', cycle: '四冲程', fireOrderText: '1-8-4-3-6-5-7-2',
     build: buildV8Engine, computeState: computeV8State, animate,
+    labels: ['曲轴', '活塞1', '连杆1', '凸轮轴(左排)', '进气门1', '火花塞1', '气缸盖(左排)', '缸体', '飞轮', '排气歧管(左排)'],
   },
 };
 const engineStates = {
@@ -101,10 +103,49 @@ function setupEngine(id) {
   roots = engine.roots;
   byId = engine.byId;
   createGuides();
+  buildLabels();
   parts.forEach((p, i) => { p.pickIndex = i + 1; pickToPart.set(i + 1, p); });
 }
 
 setupEngine('i4');
+
+// ---------------- 3D part labels (dot + line + glass tag) ----------------
+const labelEls = [];
+function buildLabels() {
+  const layer = document.getElementById('labelLayer');
+  layer.innerHTML = '';
+  labelEls.length = 0;
+  for (const name of current.labels) {
+    const p = parts.find((q) => q.name === name);
+    if (!p) continue;
+    const el = document.createElement('div');
+    el.className = 'plabel';
+    el.innerHTML = '<span class="pdot"></span><span class="pline"></span><span class="ptext">' + name + '</span>';
+    layer.appendChild(el);
+    labelEls.push({ el, p });
+  }
+}
+function projectToScreen(p) {
+  const m = projView();
+  const x = p[0], y = p[1], z = p[2];
+  const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+  if (w <= 0.0001) return null;
+  const sx = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+  const sy = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+  return {
+    x: (sx * 0.5 + 0.5) * canvas.clientWidth,
+    y: (0.5 - sy * 0.5) * canvas.clientHeight,
+  };
+}
+function updateLabels() {
+  for (const it of labelEls) {
+    if (!view.labels || !it.p.visible) { it.el.style.display = 'none'; continue; }
+    const s = projectToScreen([it.p.world[12], it.p.world[13], it.p.world[14]]);
+    if (!s) { it.el.style.display = 'none'; continue; }
+    it.el.style.display = 'flex';
+    it.el.style.transform = `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px)`;
+  }
+}
 
 function updateGuides() {
   for (const g of guides) {
@@ -135,8 +176,8 @@ function updateGuides() {
 
 // ---------------- state ----------------
 const view = {
-  theta: 0.6, phi: 0.32, dist: 980,
-  target: [0, 130, 0],
+  theta: 0.75, phi: 0.36, dist: 1020,
+  target: [0, 115, 0],
   playing: true,
   rpm: 1200,
   crankDeg: 0,
@@ -153,6 +194,7 @@ const view = {
   selectedId: null,
   goal: null,           // camera auto-focus { target, dist }
   guides: false,        // guide lines toggle
+  labels: true,         // 3D part labels toggle
 };
 const anim = { last: 0 };
 
@@ -230,8 +272,15 @@ function render() {
   computeWorldForAll();
   const eye = eyePos();
   renderer.setCamera(projView(), eye);
-  renderer.setLights(v3norm([0.45, 0.75, 0.45]), [1.0, 0.98, 0.94], v3norm([-0.6, 0.25, -0.5]), [0.75, 0.82, 1.0]);
+  renderer.setLights(
+    v3norm([0.50, 0.80, 0.45]), [1.0, 0.98, 0.94],   // key: warm white
+    v3norm([-0.70, 0.15, -0.45]), [0.55, 0.68, 1.0], // fill: cool blue
+    [0.30, 0.55, 1.0],                                // rim: tech blue
+    [0.34, 0.42, 0.55],                               // env top: cool sky
+    [0.03, 0.04, 0.06]                                // env bottom: near-black floor
+  );
   renderer.clear();
+  updateLabels();
 
   // mark selected subtree for isolate mode
   for (const p of parts) p._inSelectedSubtree = false;
@@ -383,11 +432,18 @@ function pan(dx, dy) {
 }
 
 // ---------------- selection ----------------
-function selectPart(p) {
+function selectPart(p, focus = true) {
   view.selectedId = p.id;
   view.isolatedId = null;
   updateInfo(p);
   syncTreeSelection();
+  if (focus && p.world) {
+    // smoothly move the camera to observe the selected part (no jump)
+    view.goal = {
+      target: [p.world[12], p.world[13], p.world[14]],
+      dist: (p.meshes.length === 0 || p.children.length > 3) ? 620 : 460,
+    };
+  }
 }
 
 // ---------------- UI: tree ----------------
@@ -492,9 +548,11 @@ function updateCyclePanel(st) {
   const els = document.getElementById('cylList').children;
   for (let i = 0; i < current.cylinders && i < els.length; i++) {
     const el = els[i];
-    const key = st.cyl[i].stroke;
+    const c = st.cyl[i];
+    const key = c.stroke;
+    const firing = (c.stroke === 'power');
     el.textContent = `${i + 1}缸 ${STROKE_ZH[key]}`;
-    el.className = 'cyl cyl-' + key;
+    el.className = 'cyl cyl-' + key + (firing ? ' firing' : '');
     el.style.display = view.cycle ? '' : 'none';
   }
   document.getElementById('crankDegReadout').textContent = Math.round(view.crankDeg % 720) + '°';
@@ -551,6 +609,7 @@ function wireControls() {
   $('btnRestoreFull').addEventListener('click', () => setLayer(0));
   $('btnFocus').addEventListener('click', () => focusOnLayer(view.currentLayer));
   $('btnGuides').addEventListener('click', () => { view.guides = !view.guides; syncModeButtons(); });
+  $('btnLabels').addEventListener('click', () => { view.labels = !view.labels; syncModeButtons(); });
 
   $('btnFull').addEventListener('click', () => { setLayer(0); view.xray = false; syncModeButtons(); });
   $('btnXray').addEventListener('click', () => { view.xray = !view.xray; syncModeButtons(); });
@@ -570,9 +629,9 @@ function wireControls() {
     view.targetExplode = 0; view.explode = 0; view.currentLayer = 0;
     expl.value = 0; $('explodeVal').textContent = '0%';
     layerLabel.textContent = LAYER_INFO[0].name;
-    view.cutaway = false; view.xray = false; view.cycle = true; view.guides = false;
+    view.cutaway = false; view.xray = false; view.cycle = true; view.guides = false; view.labels = true;
     view.isolatedId = null; view.selectedId = null; view.goal = null;
-    view.theta = 0.6; view.phi = 0.32; view.dist = 980; view.target = [0, 130, 0];
+    view.theta = 0.75; view.phi = 0.36; view.dist = 1020; view.target = [0, 115, 0];
     for (const p of parts) p.visible = true;
     for (const g of engine.gasParts) g.visible = true;
     for (const f of engine.flameParts) f.visible = true;
@@ -589,7 +648,7 @@ function wireControls() {
     viewFront: { theta: 0, phi: 0, dist: 1400, target: [0, 120, 0] },
     viewSide: { theta: Math.PI / 2, phi: 0.05, dist: 1400, target: [0, 120, 0] },
     viewTop: { theta: 0.6, phi: 1.35, dist: 1300, target: [0, 140, 0] },
-    viewIso: { theta: 0.6, phi: 0.32, dist: 980, target: [0, 130, 0] },
+    viewIso: { theta: 0.75, phi: 0.36, dist: 1020, target: [0, 115, 0] },
   };
   for (const id of Object.keys(presets)) {
     const v = presets[id];
@@ -602,6 +661,7 @@ function syncModeButtons() {
   $('btnCut').classList.toggle('active', view.cutaway);
   $('btnCycle').classList.toggle('active', view.cycle);
   $('btnGuides').classList.toggle('active', view.guides);
+  $('btnLabels').classList.toggle('active', view.labels);
 }
 function rebuildTreePreserve() {
   buildTree();
@@ -611,9 +671,9 @@ function rebuildTreePreserve() {
 // ---------------- engine switching ----------------
 function resetCameraForEngine() {
   if (current.id === 'v8') {
-    view.theta = 0.6; view.phi = 0.35; view.dist = 1200; view.target = [0, 110, 0];
+    view.theta = 0.75; view.phi = 0.40; view.dist = 1250; view.target = [0, 105, 0];
   } else {
-    view.theta = 0.6; view.phi = 0.32; view.dist = 980; view.target = [0, 130, 0];
+    view.theta = 0.75; view.phi = 0.36; view.dist = 1020; view.target = [0, 115, 0];
   }
 }
 function syncUiState() {
