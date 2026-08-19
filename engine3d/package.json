@@ -1,6 +1,0 @@
-{
-  "name": "inline4-engine-3d",
-  "private": true,
-  "type": "module",
-  "description": "Interactive engineering-accurate 3D model of a four-stroke inline-4 gasoline engine (no external dependencies)."
-}
